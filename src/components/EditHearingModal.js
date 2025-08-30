@@ -1,5 +1,9 @@
+// src/components/EditHearingModal.js
 import React, { useState, useEffect } from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { UploadCloud, FileText, XCircle } from 'lucide-react-native';
+
 import { THEME } from '../constants/theme';
 import Input from './Input';
 
@@ -7,11 +11,17 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
   const [formState, setFormState] = useState(hearing);
   const [errors, setErrors] = useState({});
 
+  // --- FUNÇÃO CORRIGIDA ---
   useEffect(() => {
-    setFormState(hearing);
-    setErrors({});
+    // Adicionamos a verificação "if (hearing)" para evitar o crash
+    if (hearing) {
+      // Garante que 'proceedings' seja sempre um array, mesmo em cadastros antigos
+      setFormState({ ...hearing, proceedings: hearing.proceedings || [] });
+      setErrors({});
+    }
   }, [hearing]);
 
+  // Esta verificação também ajuda a prevenir renderizações com dados nulos
   if (!isOpen || !formState) return null;
 
   const handleChange = (name, value) => {
@@ -25,12 +35,44 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
     }
   };
 
-  // --- PASSO 2: ATUALIZAR A VALIDAÇÃO ---
+  const pickDocument = async () => {
+    if (formState.proceedings.length >= 50) {
+      Alert.alert("Limite atingido", "Você já adicionou o máximo de 50 andamentos.");
+      return;
+    }
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (!result.canceled) {
+        const newFiles = result.assets;
+        setFormState(prev => ({ 
+          ...prev, 
+          proceedings: [...prev.proceedings, ...newFiles].slice(0, 50) 
+        }));
+      }
+    } catch (err) {
+      Alert.alert("Erro", "Não foi possível selecionar os arquivos.");
+      console.error(err);
+    }
+  };
+
+  const removeProceeding = (uriToRemove) => {
+    setFormState(prev => ({ 
+      ...prev, 
+      proceedings: prev.proceedings.filter(file => file.uri !== uriToRemove) 
+    }));
+  };
+
   const validate = () => {
     const newErrors = {};
     Object.keys(formState).forEach(key => {
-      // ALTERADO: Adicionamos "&& key !== 'description'" para que a descrição não seja obrigatória
-      if (!formState[key] && key !== 'id' && key !== 'description') {
+      if (key === 'id' || key === 'description' || key === 'proceedings') return;
+      if (!formState[key]) {
         newErrors[key] = "Preencha o campo";
       }
     });
@@ -63,20 +105,30 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
             <Input label="Local" value={formState.location} onChangeText={(v) => handleChange('location', v)} error={errors.location} />
             <Input label="Partes" value={formState.parties} onChangeText={(v) => handleChange('parties', v)} error={errors.parties} />
             <Input label="Natureza" value={formState.nature} onChangeText={(v) => handleChange('nature', v)} error={errors.nature} />
-            
-            {/* --- PASSO 1: ADICIONAR O CAMPO DE DESCRIÇÃO --- */}
             <Input 
               label="Descrição (Opcional)" 
               value={formState.description} 
-              onChangeText={(v) => handleChange('description', v)} 
-              placeholder="Adicione notas, links ou detalhes importantes..." 
-              error={errors.description}
+              onChangeText={(v) => handleChange('description', v)}
               multiline={true}
               numberOfLines={4}
             />
-            {/* --- INSERIR ABA DE ARTIGO, TANTO PRA CADASTRO, EDIÇÃO E VISUALIZAÇÃO --- */}
-             {/* --- INSERIR ABA DE PDF - PETIÇÕES --- */}
-              {/* --- INSERIR ABA DE PDF - PDF QUE CONTENHA OS CADASTROS QUE VÃO DIRETO PRO APP SEM DIGITAR --- */}
+
+            <Text style={styles.label}>Andamentos (Opcional)</Text>
+            {formState.proceedings.map((file) => (
+              <View key={file.uri} style={styles.fileSelectedContainer}>
+                <FileText color={THEME.primary} size={24} />
+                <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+                <TouchableOpacity onPress={() => removeProceeding(file.uri)}>
+                  <XCircle color={THEME.danger} size={24} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {formState.proceedings.length < 50 && (
+              <TouchableOpacity style={styles.documentPicker} onPress={pickDocument}>
+                <UploadCloud color={THEME.primary} size={24} />
+                <Text style={styles.documentPickerText}>Adicionar Andamento (PDF)</Text>
+              </TouchableOpacity>
+            )}
 
           </ScrollView>
           <View style={styles.buttonContainer}>
@@ -92,6 +144,7 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
     </Modal>
   );
 };
+
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   container: { backgroundColor: THEME.card, padding: 24, borderRadius: 8, width: '100%', maxHeight: '85%' },
@@ -101,6 +154,46 @@ const styles = StyleSheet.create({
   buttonContainer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 24 },
   button: { paddingVertical: 10, paddingHorizontal: 24, borderRadius: 8, marginLeft: 16 },
   buttonText: { color: THEME.background, fontWeight: 'bold' },
+  label: {
+    color: THEME.primary,
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  documentPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.card,
+    borderWidth: 2,
+    borderColor: THEME.textSecondary,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 16,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  documentPickerText: {
+    color: THEME.textSecondary,
+    marginLeft: 12,
+    fontSize: 16,
+  },
+  fileSelectedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: THEME.card,
+    borderRadius: 8,
+    padding: 16,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  fileName: {
+    color: THEME.text,
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 12,
+    fontSize: 16,
+  },
 });
 
 export default EditHearingModal;

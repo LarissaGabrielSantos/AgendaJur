@@ -11,17 +11,18 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
   const [formState, setFormState] = useState(hearing);
   const [errors, setErrors] = useState({});
 
-  // --- FUNÇÃO CORRIGIDA ---
   useEffect(() => {
-    // Adicionamos a verificação "if (hearing)" para evitar o crash
     if (hearing) {
-      // Garante que 'proceedings' seja sempre um array, mesmo em cadastros antigos
-      setFormState({ ...hearing, proceedings: hearing.proceedings || [] });
+      // Garante que 'proceedings' e 'clientEmail' existam para evitar erros com cadastros antigos
+      setFormState({ 
+        ...hearing, 
+        proceedings: hearing.proceedings || [],
+        clientEmail: hearing.clientEmail || '' 
+      });
       setErrors({});
     }
   }, [hearing]);
 
-  // Esta verificação também ajuda a prevenir renderizações com dados nulos
   if (!isOpen || !formState) return null;
 
   const handleChange = (name, value) => {
@@ -71,6 +72,7 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
   const validate = () => {
     const newErrors = {};
     Object.keys(formState).forEach(key => {
+      // O campo clientEmail é obrigatório, então ele NÃO está na lista de exceções
       if (key === 'id' || key === 'description' || key === 'proceedings') return;
       if (!formState[key]) {
         newErrors[key] = "Preencha o campo";
@@ -95,9 +97,22 @@ const EditHearingModal = ({ isOpen, onClose, onSave, hearing }) => {
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
+          {/* TÍTULO CORRIGIDO */}
           <Text style={styles.title}>Editar Audiência</Text>
           <ScrollView>
             <Input label="Número do Processo" value={formState.processNumber} onChangeText={(v) => handleChange('processNumber', v)} error={errors.processNumber} />
+            
+            {/* --- CAMPO DE E-MAIL DO CLIENTE ADICIONADO --- */}
+            <Input 
+              label="E-mail do Cliente Associado" 
+              value={formState.clientEmail} 
+              onChangeText={(v) => handleChange('clientEmail', v.toLowerCase())} 
+              placeholder="Digite o e-mail do cliente" 
+              error={errors.clientEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
             <View style={styles.row}>
               <View style={styles.halfWidth}><Input label="Data" value={formState.date} onChangeText={(v) => handleChange('date', v)} error={errors.date} /></View>
               <View style={styles.halfWidth}><Input label="Hora" value={formState.time} onChangeText={(v) => handleChange('time', v)} error={errors.time} /></View>

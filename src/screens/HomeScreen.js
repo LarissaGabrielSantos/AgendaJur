@@ -7,17 +7,28 @@ import { CheckCircle, XCircle, ChevronDown } from 'lucide-react-native';
 import TypingEffect from '../components/TypingEffect';
 
 export default function HomeScreen() {
-  const { hearings } = useContext(AppContext);
+  const { hearings, currentUser, isAdmin } = useContext(AppContext);
   const [expandedId, setExpandedId] = useState(null);
   const today = new Date().toISOString().split('T')[0];
-  const todaysHearings = useMemo(() => hearings.filter(h => h.date === today), [hearings, today]);
+
+  const filteredHearings = useMemo(() => {
+    if (isAdmin) return hearings;
+    if (!currentUser) return [];
+    return hearings.filter(h => h.clientEmail?.toLowerCase() === currentUser.email.toLowerCase());
+  }, [hearings, currentUser, isAdmin]);
+
+  const todaysHearings = useMemo(() => 
+    filteredHearings.filter(h => h.date === today),
+    [filteredHearings, today]
+  );
 
   const getGreeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return "  Bom dia, Dr. José Sérgio";
-    if (hour < 18) return "  Boa tarde, Dr. José Sérgio";
-    return "  Boa noite, Dr. José Sérgio";
-  }, []);
+    const userName = currentUser ? currentUser.fullName : 'Usuário'; 
+    const greetingTime = hour < 12 ? "   Bom dia" : hour < 18 ? "   Boa tarde" : "   Boa noite";
+    
+    return `${greetingTime}, ${userName}`;
+  }, [currentUser]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -77,23 +88,23 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  contentContainer: { padding: 24 },
-  greetingContainer: { marginBottom: 32 },
-  title: { fontSize: 28, fontWeight: 'bold', color: THEME.primary, marginBottom: 24 },
-  calendarCard: { backgroundColor: THEME.card, padding: 16, borderRadius: 8, marginBottom: 24 },
-  monthYear: { color: THEME.text, fontWeight: 'bold', fontSize: 20 },
-  dateContainer: { alignItems: 'center', paddingVertical: 16 },
-  dayNumber: { color: THEME.text, fontWeight: 'bold', fontSize: 24 },
-  dayName: { color: THEME.textSecondary, fontSize: 18 },
-  statusCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 24, borderRadius: 8 },
-  statusText: { fontSize: 18, fontWeight: '600' },
-  detailsSection: { marginTop: 32 },
-  detailsTitle: { fontSize: 20, fontWeight: 'bold', color: THEME.primary, marginBottom: 16 },
-  hearingCard: { backgroundColor: THEME.card, borderRadius: 8, marginBottom: 12 },
-  hearingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
-  hearingHeaderText: { color: THEME.text, fontWeight: 'bold' },
-  hearingDetails: { padding: 16, borderTopWidth: 1, borderColor: 'rgba(169, 169, 169, 0.2)' },
-  detailText: { color: THEME.textSecondary, marginBottom: 8, fontSize: 14 },
-  detailLabel: { color: THEME.primary, fontWeight: 'bold' },
+    container: { flex: 1, backgroundColor: THEME.background },
+    contentContainer: { padding: 24 },
+    greetingContainer: { marginBottom: 32, minHeight: 32 },
+    title: { fontSize: 28, fontWeight: 'bold', color: THEME.primary, marginBottom: 24 },
+    calendarCard: { backgroundColor: THEME.card, padding: 16, borderRadius: 8, marginBottom: 24 },
+    monthYear: { color: THEME.text, fontWeight: 'bold', fontSize: 20 },
+    dateContainer: { alignItems: 'center', paddingVertical: 16 },
+    dayNumber: { color: THEME.text, fontWeight: 'bold', fontSize: 24 },
+    dayName: { color: THEME.textSecondary, fontSize: 18 },
+    statusCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 24, borderRadius: 8 },
+    statusText: { fontSize: 18, fontWeight: '600' },
+    detailsSection: { marginTop: 32 },
+    detailsTitle: { fontSize: 20, fontWeight: 'bold', color: THEME.primary, marginBottom: 16 },
+    hearingCard: { backgroundColor: THEME.card, borderRadius: 8, marginBottom: 12 },
+    hearingHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+    hearingHeaderText: { color: THEME.text, fontWeight: 'bold' },
+    hearingDetails: { padding: 16, borderTopWidth: 1, borderColor: 'rgba(169, 169, 169, 0.2)' },
+    detailText: { color: THEME.textSecondary, marginBottom: 8, fontSize: 14 },
+    detailLabel: { color: THEME.primary, fontWeight: 'bold' },
 });

@@ -9,7 +9,18 @@ import TypingEffect from '../components/TypingEffect';
 export default function HomeScreen() {
   const { hearings, currentUser, isAdmin } = useContext(AppContext);
   const [expandedId, setExpandedId] = useState(null);
-  const today = new Date().toISOString().split('T')[0];
+
+  // --- CORREÇÃO APLICADA AQUI ---
+  // Esta função pega a data de hoje no fuso horário local e formata como DD/MM/AAAA
+  const getTodayFormatted = () => {
+    const todayDate = new Date();
+    const day = String(todayDate.getDate()).padStart(2, '0');
+    const month = String(todayDate.getMonth() + 1).padStart(2, '0'); // Mês em JS começa do 0
+    const year = todayDate.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const today = getTodayFormatted(); // Agora 'today' terá o formato "02/09/2025"
 
   const filteredHearings = useMemo(() => {
     if (isAdmin) return hearings;
@@ -17,6 +28,7 @@ export default function HomeScreen() {
     return hearings.filter(h => h.clientEmail?.toLowerCase() === currentUser.email.toLowerCase());
   }, [hearings, currentUser, isAdmin]);
 
+  // A comparação agora funcionará, pois 'h.date' e 'today' estão no mesmo formato
   const todaysHearings = useMemo(() => 
     filteredHearings.filter(h => h.date === today),
     [filteredHearings, today]

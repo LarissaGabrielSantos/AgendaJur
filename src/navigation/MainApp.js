@@ -1,7 +1,6 @@
 // src/navigation/MainApp.js
 import React, { useState, useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-// --- 1. IMPORTAÇÕES ADICIONADAS ---
 import { Calendar, Plus, LogOut, List, History } from 'lucide-react-native';
 import { AppContext } from '../context/AppContext';
 import { THEME } from '../constants/theme';
@@ -9,14 +8,14 @@ import HomeScreen from '../screens/HomeScreen';
 import AddHearingScreen from '../screens/AddHearingScreen';
 import ViewHearingsScreen from '../screens/ViewHearingsScreen';
 import ConfirmationModal from '../components/ConfirmationModal';
-// Importa a nova tela de Log
 import LogScreen from '../screens/LogScreen'; 
-
-// Importa a logo
 import Logo from '../assets/images/logo.png';
+
+// As importações de 'expo-notifications' e 'notificationManager' foram removidas.
 
 export default function MainApp() {
   const [activeTab, setActiveTab] = useState('home');
+  // O 'useEffect' e a lógica de 'filteredHearings' foram removidos daqui.
   const { logout, isAdmin } = useContext(AppContext);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -26,7 +25,6 @@ export default function MainApp() {
   };
 
   const renderScreen = () => {
-    // ALTERADO: Redireciona se cliente tentar acessar 'add' OU 'log'
     if (!isAdmin && (activeTab === 'add' || activeTab === 'log')) {
       return <HomeScreen />;
     }
@@ -34,7 +32,7 @@ export default function MainApp() {
       case 'home': return <HomeScreen />;
       case 'add': return <AddHearingScreen onHearingAdded={() => setActiveTab('view')} />;
       case 'view': return <ViewHearingsScreen />;
-      case 'log': return <LogScreen />; // Adiciona a rota para a tela de log
+      case 'log': return <LogScreen />;
       default: return <HomeScreen />;
     }
   };
@@ -69,7 +67,6 @@ export default function MainApp() {
       <View style={styles.footer}>
         <TabButton name="home" icon={Calendar} label="Início" />
         
-        {/* --- 2. BOTÃO DE LOG ADICIONADO AQUI --- */}
         {isAdmin && (
           <>
             <TabButton name="add" icon={Plus} label="Cadastrar" />

@@ -1,8 +1,18 @@
-// src/screens/AddHearingScreen.js
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Platform, KeyboardAvoidingView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Platform,
+  KeyboardAvoidingView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { UploadCloud, FileText, XCircle } from 'lucide-react-native';
+
 import { AppContext } from '../context/AppContext';
 import { THEME } from '../constants/theme';
 import Input from '../components/Input';
@@ -14,10 +24,16 @@ const CLOUDINARY_UPLOAD_PRESET = "u9jyzisv";
 
 export default function AddHearingScreen({ onHearingAdded }) {
   const { addHearing, isAdmin, currentUser } = useContext(AppContext);
-  const [formState, setFormState] = useState({ 
-    processNumber: '', clientEmail: '', date: '', time: '', 
-    location: '', parties: '', nature: '',
-    description: '', proceedings: [],
+  const [formState, setFormState] = useState({
+    processNumber: '',
+    clientEmail: '',
+    date: '',
+    time: '',
+    location: '',
+    parties: '',
+    nature: '',
+    description: '',
+    proceedings: [],
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,50 +44,51 @@ export default function AddHearingScreen({ onHearingAdded }) {
     if (name === 'processNumber') {
       processedValue = value.replace(/[^0-9./-]/g, '');
     }
-    setFormState(prev => ({ ...prev, [name]: processedValue }));
-    if (value) { setErrors(prev => ({ ...prev, [name]: null })); }
+    setFormState((prev) => ({ ...prev, [name]: processedValue }));
+    if (value) {
+      setErrors((prev) => ({ ...prev, [name]: null }));
+    }
   };
 
-  // ALTERADO: Função de selecionar arquivos agora pega um de cada vez
   const pickDocument = async () => {
     if (formState.proceedings.length >= 50) {
       Alert.alert("Limite atingido", "Você já adicionou o máximo de 50 andamentos.");
       return;
     }
+
     try {
-      // Pedimos um único documento (multiple: false é o padrão)
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
         copyToCacheDirectory: true,
+        multiple: true,
       });
 
       if (!result.canceled) {
-        const newFile = result.assets[0];
-        // Adiciona o novo arquivo ao array
-        setFormState(prev => ({ 
-          ...prev, 
-          proceedings: [...prev.proceedings, newFile] 
+        const newFiles = result.assets;
+        setFormState((prev) => ({
+          ...prev,
+          proceedings: [...prev.proceedings, ...newFiles].slice(0, 50),
         }));
       }
     } catch (err) {
-      Alert.alert("Erro", "Não foi possível selecionar o arquivo.");
+      Alert.alert("Erro", "Não foi possível selecionar os arquivos.");
       console.error(err);
     }
   };
 
   const removeProceeding = (uriToRemove) => {
-    setFormState(prev => ({ 
-      ...prev, 
-      proceedings: prev.proceedings.filter(file => file.uri !== uriToRemove) 
+    setFormState((prev) => ({
+      ...prev,
+      proceedings: prev.proceedings.filter((file) => file.uri !== uriToRemove),
     }));
   };
 
- const validate = () => {
+  const validate = () => {
     const newErrors = {};
-    Object.keys(formState).forEach(key => {
-      if (key === 'description' || key === 'proceedings') return; 
+    Object.keys(formState).forEach((key) => {
+      if (key === 'description' || key === 'proceedings') return;
       if (isAdmin && key === 'clientEmail' && !formState[key]) {
-         newErrors[key] = "Preencha o e-mail do cliente";
+        newErrors[key] = "Preencha o e-mail do cliente";
       } else if (key !== 'clientEmail' && !formState[key]) {
         newErrors[key] = "Preencha o campo";
       }
@@ -86,24 +103,22 @@ export default function AddHearingScreen({ onHearingAdded }) {
   const handleSubmit = async () => {
     if (!validate()) return;
 
-    // --- CORREÇÃO NA VERIFICAÇÃO ---
-    // A verificação deve checar se as credenciais são IGUAIS aos placeholders, e não diferentes
-    if (CLOUDINARY_CLOUD_NAME === "SEU_CLOUD_NAME" || CLOUDINARY_UPLOAD_PRESET === "SEU_UPLOAD_PRESET") {
-        Alert.alert("Configuração Incompleta", "Por favor, adicione suas credenciais do Cloudinary no topo do arquivo.");
-        return;
+    if (CLOUDINARY_CLOUD_NAME === "dwj4shg3p" || CLOUDINARY_UPLOAD_PRESET === "u9jyzisv") {
+      Alert.alert("Configuração Incompleta", "Por favor, adicione suas credenciais do Cloudinary no topo deste arquivo.");
+      return;
     }
 
     setIsSubmitting(true);
     setUploadProgress('Iniciando...');
-    
+
     try {
       const proceedingsToSave = [];
       const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`;
-      
+
       for (let i = 0; i < formState.proceedings.length; i++) {
         const file = formState.proceedings[i];
         setUploadProgress(`Enviando arquivo ${i + 1} de ${formState.proceedings.length}...`);
-        
+
         const formData = new FormData();
         formData.append('file', {
           uri: file.uri,
@@ -112,9 +127,12 @@ export default function AddHearingScreen({ onHearingAdded }) {
         });
         formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
-        const response = await fetch(cloudinaryUrl, { method: 'POST', body: formData });
-        const data = await response.json();
+        const response = await fetch(cloudinaryUrl, {
+          method: 'POST',
+          body: formData,
+        });
 
+        const data = await response.json();
         if (data.secure_url) {
           proceedingsToSave.push({ name: file.name, url: data.secure_url });
         } else {
@@ -139,14 +157,19 @@ export default function AddHearingScreen({ onHearingAdded }) {
       await addHearing(hearingData);
 
       Alert.alert('Sucesso', 'Andamento cadastrado com sucesso!');
-      setFormState({ 
-        processNumber: '', clientEmail: '', date: '', time: '', 
-        location: '', parties: '', nature: '',
-        description: '', proceedings: []
+      setFormState({
+        processNumber: '',
+        clientEmail: '',
+        date: '',
+        time: '',
+        location: '',
+        parties: '',
+        nature: '',
+        description: '',
+        proceedings: [],
       });
       setErrors({});
       onHearingAdded();
-
     } catch (error) {
       console.error("Erro no envio: ", error);
       Alert.alert('Erro', `Ocorreu um erro ao enviar os andamentos: ${error.message}`);
@@ -157,16 +180,97 @@ export default function AddHearingScreen({ onHearingAdded }) {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        {/* ... (Seu JSX existente para os campos) ... */}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <Text style={styles.title}>Cadastrar Andamento</Text>
+
+        <Input
+          label="Número do Processo"
+          value={formState.processNumber}
+          onChangeText={(v) => handleChange('processNumber', v)}
+          placeholder="Ex: 001/2025"
+          error={errors.processNumber}
+        />
+
+        {isAdmin && (
+          <Input
+            label="E-mail do Cliente Associado"
+            value={formState.clientEmail}
+            onChangeText={(v) => handleChange('clientEmail', v.toLowerCase())}
+            placeholder="Digite o e-mail do cliente"
+            error={errors.clientEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        )}
+
+        <View style={styles.row}>
+          <View style={styles.halfWidth}>
+            <Input
+              label="Data"
+              value={formState.date}
+              onChangeText={(v) => handleChange('date', v)}
+              placeholder="DD/MM/AAAA"
+              error={errors.date}
+            />
+          </View>
+          <View style={styles.halfWidth}>
+            <Input
+              label="Hora"
+              value={formState.time}
+              onChangeText={(v) => handleChange('time', v)}
+              placeholder="HH:MM"
+              error={errors.time}
+            />
+          </View>
+        </View>
+
+        <Input
+          label="Local"
+          value={formState.location}
+          onChangeText={(v) => handleChange('location', v)}
+          placeholder="Ex: Fórum Central, Sala 101"
+          error={errors.location}
+        />
+        <Input
+          label="Partes"
+          value={formState.parties}
+          onChangeText={(v) => handleChange('parties', v)}
+          placeholder="Ex: Requerente vs. Requerido"
+          error={errors.parties}
+        />
+        <Input
+          label="Natureza"
+          value={formState.nature}
+          onChangeText={(v) => handleChange('nature', v)}
+          placeholder="Ex: Audiência de Conciliação"
+          error={errors.nature}
+        />
+
+        <Input
+          label="Descrição (Opcional)"
+          value={formState.description}
+          onChangeText={(v) => handleChange('description', v)}
+          placeholder="Adicione notas, links ou detalhes importantes..."
+          error={errors.description}
+          multiline={true}
+          numberOfLines={4}
+        />
 
         <Text style={styles.label}>Andamentos (Opcional)</Text>
-        
+
         {formState.proceedings.map((file) => (
           <View key={file.uri} style={styles.fileSelectedContainer}>
             <FileText color={THEME.primary} size={24} />
-            <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+            <Text style={styles.fileName} numberOfLines={1}>
+              {file.name}
+            </Text>
             <TouchableOpacity onPress={() => removeProceeding(file.uri)}>
               <XCircle color={THEME.danger} size={24} />
             </TouchableOpacity>
@@ -174,35 +278,56 @@ export default function AddHearingScreen({ onHearingAdded }) {
         ))}
 
         {formState.proceedings.length < 50 && (
-          // O botão de adicionar agora chama a função que pega um arquivo por vez
           <TouchableOpacity style={styles.documentPicker} onPress={pickDocument}>
             <UploadCloud color={THEME.primary} size={24} />
             <Text style={styles.documentPickerText}>Adicionar Andamento (PDF)</Text>
           </TouchableOpacity>
         )}
-        
+
         <View style={styles.buttonContainer}>
           <Button onPress={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting 
-              ? <View style={{alignItems: 'center'}}>
-                  <ActivityIndicator color={THEME.background} />
-                  {uploadProgress && <Text style={styles.progressText}>{uploadProgress}</Text>}
-                </View>
-              : <Text style={styles.buttonText}>Salvar Andamento</Text>
-            }
+            {isSubmitting ? (
+              <View style={{ alignItems: 'center' }}>
+                <ActivityIndicator color={THEME.background} />
+                {uploadProgress && (
+                  <Text style={styles.progressText}>{uploadProgress}</Text>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.buttonText}>Salvar Andamento</Text>
+            )}
           </Button>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.background },
-  contentContainer: { padding: 24, paddingBottom: 48 },
-  title: { fontSize: 28, fontWeight: 'bold', color: THEME.primary, marginBottom: 24 },
-  row: { flexDirection: 'row', justifyContent: 'space-between' },
-  halfWidth: { width: '48%' },
-  buttonContainer: { paddingTop: 32 },
+  container: {
+    flex: 1,
+    backgroundColor: THEME.background,
+  },
+  contentContainer: {
+    padding: 24,
+    paddingBottom: 48,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: THEME.primary,
+    marginBottom: 24,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  halfWidth: {
+    width: '48%',
+  },
+  buttonContainer: {
+    paddingTop: 32,
+  },
   label: {
     color: THEME.primary,
     fontSize: 14,
@@ -254,4 +379,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-

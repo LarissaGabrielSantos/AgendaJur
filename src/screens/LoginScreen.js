@@ -1,10 +1,10 @@
 // src/screens/LoginScreen.js
 import React, { useState, useContext } from 'react'; 
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
 import { AppContext } from '../context/AppContext'; 
 import { THEME } from '../constants/theme'; 
 import Input from '../components/Input'; 
-import Button from '../components/button';
+import Button from '../components/button'; // Corrigido para 'B' maiúsculo
 
 import Logo from '../assets/images/logo.png';
 
@@ -31,61 +31,86 @@ export default function LoginScreen() {
   const [fullName, setFullName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState(''); 
+  const [isSubmitting, setIsSubmitting] = useState(false); // Novo estado de carregamento
 
-  const { login, signUp } = useContext(AppContext); 
+  // Pegamos as novas funções do Firebase
+  const { login, signUp, resetPassword } = useContext(AppContext); 
 
-  const handleLogin = () => { 
+  const handleLogin = async () => { 
     if (!email || !password) {
-      setError('Por favor, preencha o e-mail e a senha.');
-      return;
+      return setError('Por favor, preencha o e-mail e a senha.');
     }
-    if (!login(email, password)) { 
-      setError('E-mail ou senha incorretos.'); 
-    } else { 
-      setError(''); 
-    } 
+    setIsSubmitting(true);
+    setError('');
+    try {
+      await login(email, password);
+      // O AppContext vai lidar com a navegação ao detectar a mudança de autenticação
+    } catch (e) {
+      if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+        setError('E-mail ou senha inválidos.');
+      } else {
+        setError('Ocorreu um erro ao fazer o login.');
+        console.error(e);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   }; 
 
-  const handleSignUp = () => {
-    // A CONDIÇÃO CORRIGIDA ESTÁ AQUI (era !!password)
+  const handleSignUp = async () => {
     if (!fullName || !email || !password || !confirmPassword) {
-      setError('Por favor, preencha todos os campos.');
-      return;
+      return setError('Por favor, preencha todos os campos.');
     }
-
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.isValid) {
-      setError(passwordValidation.message);
-      return;
+      return setError(passwordValidation.message);
     }
-
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem.');
-      return;
+      return setError('As senhas não coincidem.');
     }
-
-    const result = signUp(fullName, email, password);
-
-    if (result.success) {
-      setError('');
+    
+    setIsSubmitting(true);
+    setError('');
+    try {
+      await signUp(fullName, email, password);
       Alert.alert('Sucesso!', 'Cadastro realizado com sucesso. Faça o login para continuar.');
       switchAuthMode('login'); 
-    } else {
-      setError(result.message);
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        setError('Este e-mail já está em uso.');
+      } else {
+        setError('Ocorreu um erro ao criar a conta.');
+        console.error(e);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleForgotPassword = () => {
+  const handleForgotPassword = async () => {
     if (!email) {
-      setError('Por favor, digite seu e-mail.');
-      return;
+      return setError('Por favor, digite seu e-mail.');
     }
+    setIsSubmitting(true);
     setError('');
-    Alert.alert(
-      "Verifique seu E-mail",
-      "Se uma conta com este e-mail existir, um link de recuperação foi enviado."
-    );
-    switchAuthMode('login'); 
+    try {
+      await resetPassword(email);
+      Alert.alert(
+        "Verifique seu E-mail",
+        "Se uma conta com este e-mail existir, um link de recuperação foi enviado."
+      );
+      switchAuthMode('login'); 
+    } catch (e) {
+      // Por segurança, mostramos a mesma mensagem mesmo se o e-mail não for encontrado
+      Alert.alert(
+        "Verifique seu E-mail",
+        "Se uma conta com este e-mail existir, um link de recuperação foi enviado."
+      );
+      switchAuthMode('login'); 
+      console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const switchAuthMode = (mode) => {
@@ -116,15 +141,17 @@ export default function LoginScreen() {
         <View style={styles.form}> 
           {authMode === 'login' && (
             <>
-              <Input label="E-mail" value={email} onChangeText={setEmail} placeholder="Digite seu e-mail" keyboardType="email-address" />
+              <Input label="E-mail" value={email} onChangeText={setEmail} placeholder="Digite seu e-mail" keyboardType="email-address" autoCapitalize="none" />
               <Input label="Senha" value={password} onChangeText={setPassword} placeholder="Digite sua senha" secureTextEntry />
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <Button onPress={handleLogin}>Entrar</Button>
+              <Button onPress={handleLogin} disabled={isSubmitting}>
+                {isSubmitting ? <ActivityIndicator color={THEME.background} /> : 'Entrar'}
+              </Button>
 
-              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('forgotPassword')}>
+              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('forgotPassword')} disabled={isSubmitting}>
                 <Text style={styles.linkText}>Esqueci minha senha</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('signup')}>
+              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('signup')} disabled={isSubmitting}>
                 <Text style={styles.toggleText}>Não tem uma conta? Cadastre-se agora</Text>
               </TouchableOpacity>
             </>
@@ -133,13 +160,15 @@ export default function LoginScreen() {
           {authMode === 'signup' && (
             <>
               <Input label="Nome Completo" value={fullName} onChangeText={setFullName} placeholder="Digite seu nome completo" /> 
-              <Input label="E-mail" value={email} onChangeText={setEmail} placeholder="Digite seu e-mail" keyboardType="email-address" />
+              <Input label="E-mail" value={email} onChangeText={setEmail} placeholder="Digite seu e-mail" keyboardType="email-address" autoCapitalize="none" />
               <Input label="Senha" value={password} onChangeText={setPassword} placeholder="Mín. 8 caracteres, 1 maiúscula, 1 símbolo" secureTextEntry />
               <Input label="Confirme sua Senha" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Digite sua senha novamente" secureTextEntry />
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <Button onPress={handleSignUp}>Cadastrar</Button>
+              <Button onPress={handleSignUp} disabled={isSubmitting}>
+                {isSubmitting ? <ActivityIndicator color={THEME.background} /> : 'Cadastrar'}
+              </Button>
 
-              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('login')}>
+              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('login')} disabled={isSubmitting}>
                 <Text style={styles.toggleText}>Já tem uma conta? Faça o login</Text>
               </TouchableOpacity>
             </>
@@ -147,11 +176,13 @@ export default function LoginScreen() {
 
           {authMode === 'forgotPassword' && (
             <>
-              <Input label="E-mail" value={email} onChangeText={setEmail} placeholder="Digite o e-mail da sua conta" keyboardType="email-address" />
+              <Input label="E-mail" value={email} onChangeText={setEmail} placeholder="Digite o e-mail da sua conta" keyboardType="email-address" autoCapitalize="none" />
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <Button onPress={handleForgotPassword}>Enviar E-mail de Recuperação</Button>
+              <Button onPress={handleForgotPassword} disabled={isSubmitting}>
+                {isSubmitting ? <ActivityIndicator color={THEME.background} /> : 'Enviar E-mail de Recuperação'}
+              </Button>
 
-              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('login')}>
+              <TouchableOpacity style={styles.toggleContainer} onPress={() => switchAuthMode('login')} disabled={isSubmitting}>
                 <Text style={styles.toggleText}>Voltar para o Login</Text>
               </TouchableOpacity>
             </>

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "747886864467",
+    "project_id": "agendajur",
+    "storage_bucket": "agendajur.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:747886864467:android:91a66ed37115581bdafea6",
+        "android_client_info": {
+          "package_name": "com.larissagabrielsantos.AgendaJur"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBncXXz0kpe_M4OuARGJPot-QGBmHj_cOw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,121 +1,166 @@
 // src/context/AppContext.js
-import React, { useState, createContext, useMemo } from 'react';
+import React, { useState, createContext, useEffect, useMemo } from 'react';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 export const AppContext = createContext();
 
-// E-mail do administrador. Qualquer um logado com este e-mail terá acesso total.
-const ADMIN_EMAIL = 'jsa1@admin_';
-
 export const AppProvider = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null); 
   const [hearings, setHearings] = useState([]);
-  const [users, setUsers] = useState([
-    {
-      fullName: 'Dr. José Sérgio',
-      email: 'jsa1@admin_',
-      password: 'fufu',
-      role: 'admin', 
-    }
-  ]);
-  // --- 1. NOVO ESTADO PARA ARMAZENAR OS LOGS ---
   const [logEntries, setLogEntries] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const isAdmin = useMemo(() => {
-    return currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+    return currentUser?.email.toLowerCase() === 'escritoriojsaraujoadvogados@gmail.com';
   }, [currentUser]);
 
-  // --- 2. FUNÇÃO CENTRAL PARA ADICIONAR LOGS ---
-  const addLogEntry = (message, type = 'info') => {
-    const newLog = {
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      message,
-      type, // 'add', 'delete', 'update', 'auth'
-    };
-    // Adiciona a nova entrada no início do array
-    setLogEntries(prev => [newLog, ...prev]);
-  };
-
-
-  const addHearing = (hearing) => {
-    // Log da ação
-    addLogEntry(`Processo "${hearing.processNumber}" adicionado para ${hearing.clientEmail}.`, 'add');
-    setHearings(prev => [...prev, { ...hearing, id: Date.now() }].sort((a, b) => new Date(a.date) - new Date(b.date)));
-  };
-  
-  const deleteHearing = (id) => {
-    const hearingToDelete = hearings.find(h => h.id === id);
-    if (hearingToDelete) {
-      // Log da ação
-      addLogEntry(`Processo "${hearingToDelete.processNumber}" excluído.`, 'delete');
+  const addLogEntry = async (message, type = 'info') => {
+    try {
+      const newLog = {
+        timestamp: firestore.FieldValue.serverTimestamp(),
+        message,
+        type,
+        userEmail: currentUser?.email || 'sistema',
+      };
+      await firestore().collection('logs').add(newLog);
+    } catch (error) {
+      console.error("Erro ao adicionar log:", error);
     }
-    setHearings(prev => prev.filter(hearing => hearing.id !== id));
-  };
-
-  const updateHearing = (id, updatedHearing) => {
-    // Log da ação
-    addLogEntry(`Processo "${updatedHearing.processNumber}" atualizado.`, 'update');
-    setHearings(prev => 
-      prev.map(hearing => (hearing.id === id ? updatedHearing : hearing))
-          .sort((a, b) => new Date(a.date) - new Date(b.date))
-    );
   };
 
   const login = (email, password) => {
-    const userFound = users.find(
-      user => user.email.toLowerCase() === email.toLowerCase() && user.password === password
-    );
-
-    if (userFound) {
-      // Log da ação
-      addLogEntry(`Usuário "${userFound.fullName}" (${userFound.role}) fez login.`, 'auth');
-      setIsAuthenticated(true);
-      setCurrentUser(userFound);
-      return true;
-    }
-    return false;
+    return auth().signInWithEmailAndPassword(email, password);
   };
 
   const signUp = (fullName, email, password) => {
-    const userExists = users.some(
-      user => user.email.toLowerCase() === email.toLowerCase()
+    return auth().createUserWithEmailAndPassword(email, password)
+      .then(credentials => {
+        return firestore().collection('users').doc(credentials.user.uid).set({
+          fullName,
+          email,
+          role: 'client',
+        });
+      });
+  };
+
+  // --- FUNÇÃO DE LOGOUT CORRIGIDA ---
+  // Transformada em async para garantir a ordem das operações
+  const logout = async () => {
+    if (currentUser) {
+      // 1. Espera (await) o log ser escrito ANTES de continuar.
+      await addLogEntry(`Usuário "${currentUser.email}" fez logout.`, 'auth');
+    }
+    // 2. Só depois que o log foi escrito, encerra a sessão.
+    return auth().signOut();
+  };
+  
+  const resetPassword = (email) => {
+    return auth().sendPasswordResetEmail(email);
+  };
+
+  const addHearing = (hearingData) => {
+    addLogEntry(`Processo "${hearingData.processNumber}" adicionado para ${hearingData.clientEmail}.`, 'add');
+    return firestore().collection('hearings').add(hearingData);
+  };
+
+  const updateHearing = (id, updatedData) => {
+    addLogEntry(`Processo "${updatedData.processNumber}" atualizado.`, 'update');
+    return firestore().collection('hearings').doc(id).update(updatedData);
+  };
+
+  const deleteHearing = (id) => {
+    firestore().collection('hearings').doc(id).get().then(doc => {
+      if (doc.exists) {
+        addLogEntry(`Processo "${doc.data().processNumber}" excluído.`, 'delete');
+      }
+    });
+    return firestore().collection('hearings').doc(id).delete();
+  };
+
+  useEffect(() => {
+    const subscriber = auth().onAuthStateChanged(async (user) => {
+      if (user) {
+        const userDoc = await firestore().collection('users').doc(user.uid).get();
+        if (userDoc.exists) {
+          setCurrentUser({ ...user.toJSON(), ...userDoc.data() });
+        } else {
+          setCurrentUser(user.toJSON());
+        }
+        setIsAuthenticated(true);
+      } else {
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+      }
+      setIsLoading(false);
+    });
+    
+    return subscriber;
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setHearings([]);
+      setLogEntries([]);
+      return;
+    }
+
+    let hearingsQuery = firestore().collection('hearings');
+    if (!isAdmin) {
+      hearingsQuery = hearingsQuery.where('clientEmail', '==', currentUser.email);
+    }
+
+    const subscriberHearings = hearingsQuery.onSnapshot(
+      (querySnapshot) => {
+        const hearingsData = [];
+        if (querySnapshot) {
+          querySnapshot.forEach(doc => {
+            hearingsData.push({ ...doc.data(), id: doc.id });
+          });
+        }
+        setHearings(hearingsData.sort((a, b) => new Date(a.date) - new Date(b.date)));
+      },
+      (error) => { console.error("Erro ao buscar audiências: ", error); }
     );
 
-    if (userExists) {
-      return { success: false, message: 'Este e-mail já está em uso.' };
+    let subscriberLogs;
+    if (isAdmin) {
+      subscriberLogs = firestore().collection('logs').orderBy('timestamp', 'desc').limit(100)
+        .onSnapshot(
+          (querySnapshot) => {
+            const logsData = [];
+            if (querySnapshot) {
+              querySnapshot.forEach(doc => {
+                logsData.push({ ...doc.data(), id: doc.id });
+              });
+            }
+            setLogEntries(logsData);
+          },
+          (error) => { console.error("Erro ao buscar logs: ", error); }
+        );
     }
 
-    // Log da ação
-    addLogEntry(`Novo cliente "${fullName}" cadastrado com o e-mail ${email}.`, 'add');
-    const newUser = { fullName, email, password, role: 'client' }; 
-    setUsers(prevUsers => [...prevUsers, newUser]);
-    return { success: true };
-  };
+    return () => {
+      if (subscriberHearings) subscriberHearings();
+      if (subscriberLogs) subscriberLogs();
+    };
+  }, [currentUser, isAdmin]);
 
-  const logout = () => {
-    if (currentUser) {
-      // Log da ação
-      addLogEntry(`Usuário "${currentUser.fullName}" fez logout.`, 'auth');
-    }
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-  };
-
-  // --- 3. EXPÕE O ESTADO DE LOGS NO CONTEXTO ---
   const value = {
-    isAuthenticated,
     currentUser,
+    isAuthenticated,
     isAdmin,
     hearings,
-    users,
-    logEntries, // Disponibiliza os logs para a nova tela
-    addHearing,
-    deleteHearing,
-    updateHearing,
+    logEntries,
+    isLoading,
     login,
     logout,
     signUp,
+    resetPassword,
+    addHearing,
+    updateHearing,
+    deleteHearing,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

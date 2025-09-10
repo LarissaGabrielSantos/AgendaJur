@@ -9,14 +9,10 @@ const TypingEffect = ({ text, speed = 100 }) => {
 
   useEffect(() => {
     let index = 0;
-    // Garante que o texto comece vazio sempre que o 'text' prop mudar
     setDisplayedText('');
 
     const typingInterval = setInterval(() => {
       if (index < text.length) {
-        // --- LÓGICA ALTERADA AQUI ---
-        // Em vez de adicionar letra por letra ao estado anterior (que pode estar obsoleto),
-        // construímos uma substring a partir do texto original. Isso é mais seguro.
         setDisplayedText(text.substring(0, index + 1));
         index++;
       } else {
@@ -25,7 +21,7 @@ const TypingEffect = ({ text, speed = 100 }) => {
     }, speed);
 
     return () => clearInterval(typingInterval);
-  }, [text, speed]); // O efeito reinicia sempre que o 'text' muda
+  }, [text, speed]);
   
   useEffect(() => {
     const cursorInterval = setInterval(() => {
@@ -35,7 +31,12 @@ const TypingEffect = ({ text, speed = 100 }) => {
   }, []);
 
   return (
-    <Text style={styles.text}>
+    // --- CORREÇÃO APLICADA AQUI ---
+    <Text 
+      style={styles.text}
+      numberOfLines={1} 
+      ellipsizeMode="tail" // Adiciona "..." se o texto for muito grande
+    >
       {displayedText}
       {showCursor && <Text style={styles.cursor}>|</Text>}
     </Text>

@@ -1,5 +1,8 @@
+
 import React, { useState, useContext, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator } from 'react-native';
+// 1. Importações necessárias para baixar e compartilhar
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { AppContext } from '../context/AppContext';
 import { THEME } from '../constants/theme';
@@ -7,14 +10,10 @@ import { Trash2, Pencil, Paperclip, FileText, X } from 'lucide-react-native';
 import ConfirmationModal from '../components/ConfirmationModal';
 import EditHearingModal from '../components/EditHearingModal';
 
-const FilesListModal = ({ isOpen, onClose, files, onFilePress }) => {
+// O Modal para listar múltiplos arquivos agora mostra o feedback de download
+const FilesListModal = ({ isOpen, onClose, files, onFilePress, isDownloading }) => {
   return (
-    <Modal
-      transparent={true}
-      visible={isOpen}
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal transparent={true} visible={isOpen} animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -23,20 +22,26 @@ const FilesListModal = ({ isOpen, onClose, files, onFilePress }) => {
               <X color={THEME.textSecondary} size={24} />
             </TouchableOpacity>
           </View>
-          <ScrollView>
-            {files.map(file => (
-              <TouchableOpacity key={file.uri} style={styles.fileItem} onPress={() => onFilePress(file.uri)}>
-                <FileText color={THEME.primary} size={20} />
-                <Text style={styles.fileNameModal} numberOfLines={1}>{file.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {isDownloading ? (
+            <View style={styles.downloadingContainer}>
+              <ActivityIndicator size="large" color={THEME.primary} />
+              <Text style={styles.downloadingText}>Baixando arquivo...</Text>
+            </View>
+          ) : (
+            <ScrollView>
+              {files && files.map(file => (
+                <TouchableOpacity key={file.url} style={styles.fileItem} onPress={() => onFilePress(file)}>
+                  <FileText color={THEME.primary} size={20} />
+                  <Text style={styles.fileNameModal} numberOfLines={1}>{file.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
       </View>
     </Modal>
   );
 };
-
 
 export default function ViewHearingsScreen() {
     const { hearings, deleteHearing, updateHearing, currentUser, isAdmin } = useContext(AppContext);
@@ -44,14 +49,12 @@ export default function ViewHearingsScreen() {
     const [editModal, setEditModal] = useState({ isOpen: false, hearing: null });
     const [editConfirmModal, setEditConfirmModal] = useState({ isOpen: false, data: null });
     const [filesModal, setFilesModal] = useState({ isOpen: false, files: [] });
+    // 2. Estado para mostrar o feedback de "Baixando..."
+    const [isDownloading, setIsDownloading] = useState(false);
 
     const filteredHearings = useMemo(() => {
-        if (isAdmin) {
-            return hearings;
-        }
-        if (!currentUser) {
-            return [];
-        }
+        if (isAdmin) { return hearings; }
+        if (!currentUser) { return []; }
         return hearings.filter(
             h => h.clientEmail?.toLowerCase() === currentUser.email.toLowerCase()
         );
@@ -59,32 +62,66 @@ export default function ViewHearingsScreen() {
 
     const openDeleteModal = (id) => setDeleteModal({ isOpen: true, hearingId: id });
     const closeDeleteModal = () => setDeleteModal({ isOpen: false, hearingId: null });
-    const handleConfirmDelete = () => { if (deleteModal.hearingId) { deleteHearing(deleteModal.hearingId); } closeDeleteModal(); };
+     const handleConfirmDelete = async () => { 
+      if (deleteModal.hearingId) { 
+        try { await deleteHearing(deleteModal.hearingId); } 
+        catch (error) { Alert.alert('Erro', 'Não foi possível excluir o andamento.'); console.error(error); }
+      } 
+      closeDeleteModal(); 
+    };
     const openEditModal = (hearing) => setEditModal({ isOpen: true, hearing });
     const closeEditModal = () => setEditModal({ isOpen: false, hearing: null });
     const handleSaveEdit = (updatedHearing) => { closeEditModal(); setEditConfirmModal({ isOpen: true, data: updatedHearing }); };
-    const handleConfirmSave = () => { if (editConfirmModal.data) { updateHearing(editConfirmModal.data.id, editConfirmModal.data); } setEditConfirmModal({ isOpen: false, data: null }); };
+    const handleConfirmSave = async () => { 
+      if (editConfirmModal.data) { 
+        try {
+          const { id, ...dataToUpdate } = editConfirmModal.data;
+          await updateHearing(id, dataToUpdate);
+        } catch (error) { Alert.alert('Erro', 'Não foi possível atualizar o andamento.'); console.error(error); }
+      } 
+      setEditConfirmModal({ isOpen: false, data: null }); 
+    };
+
     const formatDate = (dateString) => { if (!dateString || typeof dateString !== 'string') return ''; if (dateString.includes('/')) return dateString; const [year, month, day] = dateString.split('-'); if (day && month && year) return `${day}/${month}/${year}`; return dateString; };
 
-    const handleOpenFile = async (fileUri) => {
+    // --- 3. FUNÇÃO DE ABRIR ARQUIVO ATUALIZADA E DEFINITIVA ---
+    const handleOpenFile = async (file) => {
+        if (!file || !file.url) {
+          Alert.alert("Erro", "Link do arquivo inválido.");
+          return;
+        }
+        setIsDownloading(true);
         try {
+            // Cria um nome de arquivo único no cache do celular
+            const localUri = FileSystem.cacheDirectory + file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+
+            // Baixa o arquivo do Cloudinary para o celular
+            await FileSystem.downloadAsync(file.url, localUri);
+
+            // Verifica se o compartilhamento está disponível no aparelho
             const isSharingAvailable = await Sharing.isAvailableAsync();
             if (!isSharingAvailable) {
                 Alert.alert("Erro", "A visualização de arquivos não está disponível neste dispositivo.");
+                setIsDownloading(false);
                 return;
             }
-            await Sharing.shareAsync(fileUri);
+            
+            // Abre o menu de compartilhamento do Android/iOS com o arquivo LOCAL
+            // e informa que é um PDF
+            await Sharing.shareAsync(localUri, { mimeType: 'application/pdf' });
+
         } catch (error) {
-            Alert.alert("Erro", "Não foi possível abrir o arquivo.");
+            Alert.alert("Erro", "Não foi possível baixar ou abrir o arquivo.");
             console.error(error);
+        } finally {
+            setIsDownloading(false); // Garante que o feedback de "Baixando..." desapareça
         }
     };
     
     const handleAttachmentPress = (proceedings) => {
         if (!proceedings || proceedings.length === 0) return;
-
         if (proceedings.length === 1) {
-            handleOpenFile(proceedings[0].uri);
+            handleOpenFile(proceedings[0]);
         } else {
             setFilesModal({ isOpen: true, files: proceedings });
         }
@@ -101,6 +138,7 @@ export default function ViewHearingsScreen() {
               onClose={() => setFilesModal({ isOpen: false, files: [] })}
               files={filesModal.files}
               onFilePress={handleOpenFile}
+              isDownloading={isDownloading}
             />
             
             <Text style={styles.title}>Andamentos Cadastrados</Text>
@@ -133,8 +171,6 @@ export default function ViewHearingsScreen() {
                                 )}
                             </View>
 
-                            {/* --- LÓGICA DE PERMISSÃO ADICIONADA AQUI --- */}
-                            {/* Este bloco de ícones só será renderizado se 'isAdmin' for verdadeiro */}
                             {isAdmin && (
                                 <View style={styles.actionsContainer}>
                                     <TouchableOpacity onPress={() => openEditModal(hearing)} style={styles.iconButton}>
@@ -156,7 +192,7 @@ export default function ViewHearingsScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: THEME.background, padding: 24 },
     title: { fontSize: 28, fontWeight: 'bold', color: THEME.primary, marginBottom: 24 },
-    emptyText: { color: THEME.textSecondary, fontSize: 16 },
+    emptyText: { color: THEME.textSecondary, fontSize: 16, textAlign: 'center', marginTop: 40 },
     list: { paddingBottom: 24 },
     card: { backgroundColor: THEME.card, borderRadius: 8, padding: 16, marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between' },
     cardContent: { flex: 1, marginRight: 8 },
@@ -164,7 +200,7 @@ const styles = StyleSheet.create({
     processNumber: { color: THEME.text, fontSize: 18, fontWeight: 'bold', flexShrink: 1 },
     attachmentChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: THEME.primary, borderRadius: 12, paddingVertical: 4, paddingHorizontal: 8, marginLeft: 8 },
     attachmentText: { color: THEME.background, fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
-    infoText: { color: THEME.textSecondary },
+    infoText: { color: THEME.textSecondary, marginTop: 2 },
     partiesText: { color: THEME.text, fontSize: 12, marginTop: 8 },
     descriptionText: { color: THEME.textSecondary, fontStyle: 'italic', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderColor: '#333' },
     actionsContainer: { flexDirection: 'column', justifyContent: 'flex-start' },
@@ -175,4 +211,6 @@ const styles = StyleSheet.create({
     modalTitle: { color: THEME.primary, fontSize: 20, fontWeight: 'bold' },
     fileItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
     fileNameModal: { color: THEME.text, fontSize: 16, marginLeft: 12, flex: 1 },
+    downloadingContainer: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
+    downloadingText: { marginTop: 12, color: THEME.textSecondary, fontSize: 16 },
 });

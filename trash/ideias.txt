@@ -1,5 +1,0 @@
-- Usar o clerk { 2fa }
-- Fazer a integração Forms x App: ao enviar o forms, é enviado ao email do cliente o codigo de acesso ao aplicativo
-- banco de dados
-- criar o apk
-- manual de uso (video)

@@ -4,26 +4,37 @@
     "slug": "AgendaJur",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "icon": "./assets/logoapp.png",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#121212"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.larissagabrielsantos.AgendaJur",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/logoapp.png",
+        "backgroundColor": "#121212"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.larissagabrielsantos.AgendaJur",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d4b177bd-a3b2-456d-8cc1-63354b4bea73"
+      }
     }
   }
 }

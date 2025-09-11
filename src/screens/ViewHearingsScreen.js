@@ -1,17 +1,14 @@
-
 import React, { useState, useContext, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator } from 'react-native';
-// 1. Importações necessárias para baixar e compartilhar
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+// 1. Linking é importado do react-native. FileSystem e Sharing foram removidos.
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, Linking } from 'react-native';
 import { AppContext } from '../context/AppContext';
 import { THEME } from '../constants/theme';
 import { Trash2, Pencil, Paperclip, FileText, X } from 'lucide-react-native';
 import ConfirmationModal from '../components/ConfirmationModal';
 import EditHearingModal from '../components/EditHearingModal';
 
-// O Modal para listar múltiplos arquivos agora mostra o feedback de download
-const FilesListModal = ({ isOpen, onClose, files, onFilePress, isDownloading }) => {
+// O FilesListModal não precisa mais do estado de 'isDownloading'
+const FilesListModal = ({ isOpen, onClose, files, onFilePress }) => {
   return (
     <Modal transparent={true} visible={isOpen} animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
@@ -22,21 +19,14 @@ const FilesListModal = ({ isOpen, onClose, files, onFilePress, isDownloading }) 
               <X color={THEME.textSecondary} size={24} />
             </TouchableOpacity>
           </View>
-          {isDownloading ? (
-            <View style={styles.downloadingContainer}>
-              <ActivityIndicator size="large" color={THEME.primary} />
-              <Text style={styles.downloadingText}>Baixando arquivo...</Text>
-            </View>
-          ) : (
-            <ScrollView>
-              {files && files.map(file => (
-                <TouchableOpacity key={file.url} style={styles.fileItem} onPress={() => onFilePress(file)}>
-                  <FileText color={THEME.primary} size={20} />
-                  <Text style={styles.fileNameModal} numberOfLines={1}>{file.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+          <ScrollView>
+            {files && files.map(file => (
+              <TouchableOpacity key={file.url} style={styles.fileItem} onPress={() => onFilePress(file)}>
+                <FileText color={THEME.primary} size={20} />
+                <Text style={styles.fileNameModal} numberOfLines={1}>{file.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -49,9 +39,9 @@ export default function ViewHearingsScreen() {
     const [editModal, setEditModal] = useState({ isOpen: false, hearing: null });
     const [editConfirmModal, setEditConfirmModal] = useState({ isOpen: false, data: null });
     const [filesModal, setFilesModal] = useState({ isOpen: false, files: [] });
-    // 2. Estado para mostrar o feedback de "Baixando..."
-    const [isDownloading, setIsDownloading] = useState(false);
-
+    
+    // O estado 'isDownloading' foi removido
+    
     const filteredHearings = useMemo(() => {
         if (isAdmin) { return hearings; }
         if (!currentUser) { return []; }
@@ -62,16 +52,19 @@ export default function ViewHearingsScreen() {
 
     const openDeleteModal = (id) => setDeleteModal({ isOpen: true, hearingId: id });
     const closeDeleteModal = () => setDeleteModal({ isOpen: false, hearingId: null });
-     const handleConfirmDelete = async () => { 
+    
+    const handleConfirmDelete = async () => { 
       if (deleteModal.hearingId) { 
         try { await deleteHearing(deleteModal.hearingId); } 
         catch (error) { Alert.alert('Erro', 'Não foi possível excluir o andamento.'); console.error(error); }
       } 
       closeDeleteModal(); 
     };
+
     const openEditModal = (hearing) => setEditModal({ isOpen: true, hearing });
     const closeEditModal = () => setEditModal({ isOpen: false, hearing: null });
     const handleSaveEdit = (updatedHearing) => { closeEditModal(); setEditConfirmModal({ isOpen: true, data: updatedHearing }); };
+
     const handleConfirmSave = async () => { 
       if (editConfirmModal.data) { 
         try {
@@ -84,37 +77,24 @@ export default function ViewHearingsScreen() {
 
     const formatDate = (dateString) => { if (!dateString || typeof dateString !== 'string') return ''; if (dateString.includes('/')) return dateString; const [year, month, day] = dateString.split('-'); if (day && month && year) return `${day}/${month}/${year}`; return dateString; };
 
-    // --- 3. FUNÇÃO DE ABRIR ARQUIVO ATUALIZADA E DEFINITIVA ---
+    // --- 2. FUNÇÃO handleOpenFile SIMPLIFICADA E CORRIGIDA ---
     const handleOpenFile = async (file) => {
         if (!file || !file.url) {
           Alert.alert("Erro", "Link do arquivo inválido.");
           return;
         }
-        setIsDownloading(true);
         try {
-            // Cria um nome de arquivo único no cache do celular
-            const localUri = FileSystem.cacheDirectory + file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-
-            // Baixa o arquivo do Cloudinary para o celular
-            await FileSystem.downloadAsync(file.url, localUri);
-
-            // Verifica se o compartilhamento está disponível no aparelho
-            const isSharingAvailable = await Sharing.isAvailableAsync();
-            if (!isSharingAvailable) {
-                Alert.alert("Erro", "A visualização de arquivos não está disponível neste dispositivo.");
-                setIsDownloading(false);
-                return;
-            }
-            
-            // Abre o menu de compartilhamento do Android/iOS com o arquivo LOCAL
-            // e informa que é um PDF
-            await Sharing.shareAsync(localUri, { mimeType: 'application/pdf' });
-
+          // Verifica se o celular consegue abrir o link
+          const supported = await Linking.canOpenURL(file.url);
+          if (supported) {
+            // Pede para o sistema operacional abrir o link (geralmente no Chrome ou Safari)
+            await Linking.openURL(file.url);
+          } else {
+            Alert.alert("Erro", `Não é possível abrir este tipo de link.`);
+          }
         } catch (error) {
-            Alert.alert("Erro", "Não foi possível baixar ou abrir o arquivo.");
+            Alert.alert("Erro", "Não foi possível abrir o arquivo.");
             console.error(error);
-        } finally {
-            setIsDownloading(false); // Garante que o feedback de "Baixando..." desapareça
         }
     };
     
@@ -138,7 +118,6 @@ export default function ViewHearingsScreen() {
               onClose={() => setFilesModal({ isOpen: false, files: [] })}
               files={filesModal.files}
               onFilePress={handleOpenFile}
-              isDownloading={isDownloading}
             />
             
             <Text style={styles.title}>Andamentos Cadastrados</Text>
@@ -211,6 +190,4 @@ const styles = StyleSheet.create({
     modalTitle: { color: THEME.primary, fontSize: 20, fontWeight: 'bold' },
     fileItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
     fileNameModal: { color: THEME.text, fontSize: 16, marginLeft: 12, flex: 1 },
-    downloadingContainer: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
-    downloadingText: { marginTop: 12, color: THEME.textSecondary, fontSize: 16 },
 });
